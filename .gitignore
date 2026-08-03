@@ -1,0 +1,56 @@
+# Dependencies
+node_modules/
+**/node_modules/
+!.github/**/*.node_modules
+
+# Build output
+dist/
+**/dist/
+build/
+**/build/
+*.tsbuildinfo
+
+# Env / secrets
+.env*
+!.env.example
+*.pem
+*.key
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Cache
+.cache/
+.eslintcache
+.parcel-cache/
+.vite/
+.turbo/
+.angular/
+.svelte-kit/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+*.iml
+
+# Electron / native build artifacts
+*.asar
+out/
+
+# Coverage
+coverage/
+.nyc_output/
+
+# OS-specific
+.AppleDouble
+.LSAppleDouble
