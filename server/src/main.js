@@ -2,6 +2,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import fs from 'fs';
 import { Server as SocketIOServer } from 'socket.io';
 import { roomManager } from './rooms/roomManager.js';
 
@@ -10,10 +11,19 @@ const httpServer = createServer(app);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const clientDist = join(__dirname, '..', '..', 'client', 'dist');
+const repoRoot = join(__dirname, '..', '..');
+const clientDist = process.env.CLIENT_DIST_DIR || join(repoRoot, 'client', 'dist');
+const indexHtml = join(clientDist, 'index.html');
+const distExists = fs.existsSync(indexHtml);
 
-app.use(express.static(clientDist));
-app.get('*', (_req, res) => res.sendFile(join(clientDist, 'index.html')));
+if (distExists) {
+  app.use(express.static(clientDist));
+  app.get('*', (_req, res) => res.sendFile(indexHtml));
+} else {
+  const html = '<!doctype html><html><head><meta charset="utf-8"><title>jogo-de-luta</title></head><body><h1>Build em andamento — recarregue.</h1></body></html>';
+  app.get('*', (_req, res) => res.status(200).type('html').send(html));
+}
+
 const io = new SocketIOServer(httpServer, {
   cors: {
     origin: '*',
