@@ -1,10 +1,19 @@
 import express from 'express';
 import { createServer } from 'http';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import { Server as SocketIOServer } from 'socket.io';
 import { roomManager } from './rooms/roomManager.js';
 
 const app = express();
 const httpServer = createServer(app);
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const clientDist = join(__dirname, '..', '..', 'client', 'dist');
+
+app.use(express.static(clientDist));
+app.get('*', (_req, res) => res.sendFile(join(clientDist, 'index.html')));
 const io = new SocketIOServer(httpServer, {
   cors: {
     origin: '*',
