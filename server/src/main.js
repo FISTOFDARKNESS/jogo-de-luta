@@ -12,7 +12,7 @@ const io = new SocketIOServer(httpServer, {
   },
 });
 
-const PORT = 3002;
+const PORT = process.env.PORT || 3002;
 
 function roomPayload(room) {
   return {
