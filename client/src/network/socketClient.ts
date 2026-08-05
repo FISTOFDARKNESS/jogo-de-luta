@@ -1,6 +1,7 @@
 import { io, Socket } from 'socket.io-client';
 
-const SERVER_URL = 'http://localhost:3002';
+const IS_PRODUCTION = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+const SERVER_URL = IS_PRODUCTION ? window.location.origin : 'http://localhost:3002';
 
 let socket: Socket | null = null;
 
