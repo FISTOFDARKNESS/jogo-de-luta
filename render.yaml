@@ -2,7 +2,7 @@ services:
   - type: web
     name: jogo-de-luta
     runtime: node
-    buildCommand: npm install --prefix client && npm run build --prefix client && npm ci --prefix server
+    buildCommand: npm install && npm run build
     startCommand: npm start
     envVars:
       - key: NODE_ENV

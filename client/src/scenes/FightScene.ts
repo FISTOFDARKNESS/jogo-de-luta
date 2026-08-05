@@ -41,8 +41,9 @@ export class FightScene extends Phaser.Scene {
   private fighterClassP2: FighterClass = 'balanced';
   private botDifficulty: BotDifficulty = 'normal';
   private botConfig: DifficultyConfig = DIFFICULTY_CONFIGS.normal;
+  private stageId: string = 'neonDojo';
 
-  // Parallax Background
+  // Parallax Background & Particles
   private bgDynamicGraphics: Phaser.GameObjects.Graphics | null = null;
   private stars: Array<{ x: number; y: number; size: number; phase: number; speed: number }> = [];
   private clouds: Array<{ x: number; y: number; w: number; h: number; speed: number }> = [];
@@ -56,6 +57,12 @@ export class FightScene extends Phaser.Scene {
   private neonSign: Phaser.GameObjects.Text | null = null;
   private crowd: Array<{ x: number; baseY: number; phase: number; jumpOffset: number }> = [];
   private crowdExcitement: number = 0;
+
+  // Stage Particles
+  private lavaBubbles: Array<{ x: number; y: number; r: number; speed: number; maxH: number }> = [];
+  private rainDrops: Array<{ x: number; y: number; length: number; speedY: number; speedX: number }> = [];
+  private rainSplashes: Array<{ x: number; y: number; r: number; maxR: number; alpha: number }> = [];
+  private sakuraPetals: Array<{ x: number; y: number; sizeW: number; sizeH: number; speedY: number; speedX: number; angle: number; angleSpeed: number; phase: number }> = [];
 
   // HUD
   private p1HealthBar: Phaser.GameObjects.Rectangle | null = null;
@@ -105,7 +112,7 @@ export class FightScene extends Phaser.Scene {
     super({ key: 'FightScene' });
   }
 
-  init(data: { mode?: string; difficulty?: BotDifficulty; fighterClassP1?: FighterClass; fighterClassP2?: FighterClass; onlineRoomId?: string; isHost?: boolean }): void {
+  init(data: { mode?: string; difficulty?: BotDifficulty; fighterClassP1?: FighterClass; fighterClassP2?: FighterClass; onlineRoomId?: string; isHost?: boolean; stageId?: string }): void {
     this.isVsBot = data?.mode === 'vsBot' || data?.mode === 'arcade';
     this.isNeuralBot = data?.mode === 'arcade';
     this.isOnline = data?.mode === 'online';
@@ -115,6 +122,19 @@ export class FightScene extends Phaser.Scene {
     this.botConfig = DIFFICULTY_CONFIGS[this.botDifficulty];
     this.fighterClassP1 = data?.fighterClassP1 ?? 'balanced';
     this.fighterClassP2 = data?.fighterClassP2 ?? this.fighterClassP1;
+
+    // Configuração do mapa/estágio
+    this.stageId = data?.stageId ?? 'neonDojo';
+    if (this.isOnline && !data?.stageId) {
+      const roomId = data?.onlineRoomId ?? 'ROOM';
+      const sum = roomId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      const stages = ['neonDojo', 'volcanicTemple', 'cyberpunkCity', 'forestDojo'];
+      this.stageId = stages[sum % stages.length];
+    } else if (!data?.stageId) {
+      const stages = ['neonDojo', 'volcanicTemple', 'cyberpunkCity', 'forestDojo'];
+      this.stageId = stages[Math.floor(Math.random() * stages.length)];
+    }
+
     this.roundManager.reset();
   }
 
@@ -195,88 +215,338 @@ export class FightScene extends Phaser.Scene {
 
   private createArena(): void {
     const staticBg = this.add.graphics();
+    const groundHeight = GAME_HEIGHT - GROUND_Y;
 
-    // 1. Céu noturno com gradiente estilo dojo/arena urbana
-    for (let y = 0; y < GROUND_Y; y += 4) {
-      const ratio = y / GROUND_Y;
-      const r = Math.floor(12 + ratio * 24);
-      const g = Math.floor(10 + ratio * 15);
-      const b = Math.floor(35 + ratio * 45);
-      const color = (r << 16) | (g << 8) | b;
-      staticBg.fillStyle(color, 1);
-      staticBg.fillRect(0, y, GAME_WIDTH, 4);
+    // Reinicia vetores de partículas
+    this.lavaBubbles = [];
+    this.rainDrops = [];
+    this.rainSplashes = [];
+    this.sakuraPetals = [];
+    this.stars = [];
+    this.clouds = [];
+    this.buildings = [];
+    if (this.neonSign) {
+      this.neonSign.destroy();
+      this.neonSign = null;
     }
 
-    // Lua e brilho no fundo
-    staticBg.fillStyle(0xffffdd, 0.95);
-    staticBg.fillCircle(GAME_WIDTH - 240, 120, 40);
-    staticBg.fillStyle(0xffffdd, 0.12);
-    staticBg.fillCircle(GAME_WIDTH - 240, 120, 65);
-
-    // Inicializa o Graphics Dinâmico (fica entre o fundo estático e os lutadores)
+    // Inicializa o Graphics Dinâmico
     this.bgDynamicGraphics = this.add.graphics();
 
-    // Inicializa Estrelas
-    this.stars = [];
-    for (let i = 0; i < 45; i++) {
-      this.stars.push({
-        x: Math.random() * GAME_WIDTH,
-        y: Math.random() * (GROUND_Y - 220),
-        size: Math.random() * 2 + 1,
-        phase: Math.random() * Math.PI * 2,
-        speed: 1.5 + Math.random() * 3
-      });
-    }
+    if (this.stageId === 'neonDojo') {
+      // 1. Céu noturno com gradiente estilo dojo/arena urbana
+      for (let y = 0; y < GROUND_Y; y += 4) {
+        const ratio = y / GROUND_Y;
+        const r = Math.floor(12 + ratio * 24);
+        const g = Math.floor(10 + ratio * 15);
+        const b = Math.floor(35 + ratio * 45);
+        const color = (r << 16) | (g << 8) | b;
+        staticBg.fillStyle(color, 1);
+        staticBg.fillRect(0, y, GAME_WIDTH, 4);
+      }
 
-    // Inicializa Nuvens
-    this.clouds = [];
-    for (let i = 0; i < 5; i++) {
-      this.clouds.push({
-        x: Math.random() * GAME_WIDTH,
-        y: 40 + Math.random() * 110,
-        w: 90 + Math.random() * 80,
-        h: 25 + Math.random() * 15,
-        speed: 4 + Math.random() * 8
-      });
-    }
+      // Lua e brilho no fundo
+      staticBg.fillStyle(0xffffdd, 0.95);
+      staticBg.fillCircle(GAME_WIDTH - 240, 120, 40);
+      staticBg.fillStyle(0xffffdd, 0.12);
+      staticBg.fillCircle(GAME_WIDTH - 240, 120, 65);
 
-    // Inicializa Skyline (Prédios detalhados com janelas)
-    this.buildings = [];
-    let bx = -20;
-    while (bx < GAME_WIDTH + 50) {
-      const w = 90 + Math.random() * 100;
-      const h = 180 + Math.random() * 140;
-      // Cor de silhueta azul escura / roxa escura
-      const color = 0x090d16 + Math.floor(Math.random() * 4) * 0x010101;
+      // Inicializa Estrelas
+      for (let i = 0; i < 45; i++) {
+        this.stars.push({
+          x: Math.random() * GAME_WIDTH,
+          y: Math.random() * (GROUND_Y - 220),
+          size: Math.random() * 2 + 1,
+          phase: Math.random() * Math.PI * 2,
+          speed: 1.5 + Math.random() * 3
+        });
+      }
+
+      // Inicializa Nuvens
+      for (let i = 0; i < 5; i++) {
+        this.clouds.push({
+          x: Math.random() * GAME_WIDTH,
+          y: 40 + Math.random() * 110,
+          w: 90 + Math.random() * 80,
+          h: 25 + Math.random() * 15,
+          speed: 4 + Math.random() * 8
+        });
+      }
+
+      // Inicializa Skyline (Prédios detalhados com janelas)
+      let bx = -20;
+      while (bx < GAME_WIDTH + 50) {
+        const w = 90 + Math.random() * 100;
+        const h = 180 + Math.random() * 140;
+        const color = 0x090d16 + Math.floor(Math.random() * 4) * 0x010101;
+        
+        const windows = [];
+        const cols = Math.floor(w / 18) - 1;
+        const rows = Math.floor(h / 24) - 2;
+        for (let c = 0; c < cols; c++) {
+          for (let r = 0; r < rows; r++) {
+            windows.push({
+              x: 10 + c * 18,
+              y: h - (32 + r * 24),
+              lit: Math.random() > 0.65,
+              timer: Math.random() * 4
+            });
+          }
+        }
+        this.buildings.push({ x: bx, width: w, height: h, color, windows });
+        bx += w - 15;
+      }
+
+      // Letreiro Neon
+      this.neonSign = this.add.text(GAME_WIDTH / 2, 120, 'NEON DOJO', {
+        font: '900 48px Impact, Arial Black, sans-serif',
+        color: '#ff0077',
+        align: 'center',
+        stroke: '#ff0077',
+        strokeThickness: 3
+      }).setOrigin(0.5, 0.5);
+      this.neonSign.setShadow(0, 0, '#ff0077', 20, true, true);
+
+      // Solo do ringue (estático)
+      staticBg.fillStyle(0x131924, 1);
+      staticBg.fillRect(0, GROUND_Y, GAME_WIDTH, groundHeight);
+
+      // Placa do solo com padrão de tablado
+      staticBg.fillStyle(0x1a2333, 1);
+      for (let x = 0; x < GAME_WIDTH; x += 80) {
+        staticBg.fillRect(x, GROUND_Y, 2, groundHeight);
+      }
+
+      // Refletores de arena nas laterais (estáticos)
+      staticBg.fillStyle(0x232d3d, 1);
+      staticBg.fillRect(60, GROUND_Y - 260, 12, 260);
+      staticBg.fillRect(GAME_WIDTH - 72, GROUND_Y - 260, 12, 260);
+
+      // Holofotes de luz brilhante
+      staticBg.fillStyle(0xffd700, 0.12);
+      staticBg.fillTriangle(66, GROUND_Y - 250, 0, GROUND_Y, 200, GROUND_Y);
+      staticBg.fillTriangle(GAME_WIDTH - 66, GROUND_Y - 250, GAME_WIDTH - 200, GROUND_Y, GAME_WIDTH, GROUND_Y);
+
+      // Bordas neon amarela/ciano do ringue tatami
+      staticBg.fillStyle(0x00ffff, 0.8);
+      staticBg.fillRect(0, GROUND_Y - 2, GAME_WIDTH, 4);
+
+    } else if (this.stageId === 'volcanicTemple') {
+      // Céu vermelho escuro / gradiente de fumaça
+      for (let y = 0; y < GROUND_Y; y += 4) {
+        const ratio = y / GROUND_Y;
+        const r = Math.floor(35 - ratio * 15);
+        const g = Math.floor(5 + ratio * 10);
+        const b = Math.floor(2 + ratio * 2);
+        const color = (r << 16) | (g << 8) | b;
+        staticBg.fillStyle(color, 1);
+        staticBg.fillRect(0, y, GAME_WIDTH, 4);
+      }
+
+      // Montanhas vulcânicas ao fundo
+      staticBg.fillStyle(0x0e0604, 1);
+      staticBg.beginPath();
+      staticBg.moveTo(-50, GROUND_Y);
+      staticBg.lineTo(250, GROUND_Y - 250);
+      staticBg.lineTo(350, GROUND_Y - 220);
+      staticBg.lineTo(550, GROUND_Y - 320);
+      staticBg.lineTo(750, GROUND_Y - 140);
+      staticBg.lineTo(950, GROUND_Y - 280);
+      staticBg.lineTo(1200, GROUND_Y - 180);
+      staticBg.lineTo(GAME_WIDTH + 50, GROUND_Y);
+      staticBg.closePath();
+      staticBg.fillPath();
+
+      // Linhas de lava brilhando nas encostas
+      staticBg.lineStyle(3, 0xff3300, 0.85);
+      staticBg.lineBetween(550, GROUND_Y - 320, 520, GROUND_Y - 200);
+      staticBg.lineBetween(520, GROUND_Y - 200, 560, GROUND_Y - 100);
+      staticBg.lineBetween(250, GROUND_Y - 250, 290, GROUND_Y - 140);
+
+      // Pilares de pedra antigos
+      staticBg.fillStyle(0x19100e, 1);
+      staticBg.fillRect(120, GROUND_Y - 340, 45, 340);
+      staticBg.fillRect(100, GROUND_Y - 355, 85, 15);
+      staticBg.fillRect(110, GROUND_Y - 20, 65, 20);
+
+      staticBg.fillRect(GAME_WIDTH - 165, GROUND_Y - 340, 45, 340);
+      staticBg.fillRect(GAME_WIDTH - 185, GROUND_Y - 355, 85, 15);
+      staticBg.fillRect(GAME_WIDTH - 175, GROUND_Y - 20, 65, 20);
+
+      // Chão de rocha basáltica
+      staticBg.fillStyle(0x1f1917, 1);
+      staticBg.fillRect(0, GROUND_Y, GAME_WIDTH, groundHeight);
+
+      // Rachaduras de magma no chão
+      staticBg.fillStyle(0xcc2200, 0.95);
+      for (let x = 0; x < GAME_WIDTH; x += 120) {
+        staticBg.fillRect(x + 20, GROUND_Y + 15, 75, 10);
+      }
+
+      // Inicializa cinzas vulcânicas flutuando
+      for (let i = 0; i < 40; i++) {
+        this.stars.push({
+          x: Math.random() * GAME_WIDTH,
+          y: Math.random() * GROUND_Y,
+          size: Math.random() * 3 + 1.5,
+          phase: Math.random() * Math.PI * 2,
+          speed: 40 + Math.random() * 60
+        });
+      }
+
+      // Inicializa bolhas de lava no chão
+      for (let i = 0; i < 8; i++) {
+        this.lavaBubbles.push({
+          x: 100 + Math.random() * (GAME_WIDTH - 200),
+          y: GROUND_Y + 15,
+          r: Math.random() * 3 + 2,
+          speed: Math.random() * 10 + 5,
+          maxH: GROUND_Y + 5 - Math.random() * 12
+        });
+      }
+
+    } else if (this.stageId === 'cyberpunkCity') {
+      // Céu escuro de tempestade cian/azul
+      for (let y = 0; y < GROUND_Y; y += 4) {
+        const ratio = y / GROUND_Y;
+        const r = Math.floor(5 + ratio * 8);
+        const g = Math.floor(8 + ratio * 15);
+        const b = Math.floor(18 + ratio * 20);
+        const color = (r << 16) | (g << 8) | b;
+        staticBg.fillStyle(color, 1);
+        staticBg.fillRect(0, y, GAME_WIDTH, 4);
+      }
+
+      // Silhueta de arranha-céus cinza-escuro com propagandas
+      staticBg.fillStyle(0x0b101d, 1);
+      staticBg.fillRect(80, GROUND_Y - 420, 180, 420);
+      staticBg.fillRect(360, GROUND_Y - 320, 160, 320);
+      staticBg.fillRect(820, GROUND_Y - 380, 220, 380);
+      staticBg.fillRect(GAME_WIDTH - 200, GROUND_Y - 460, 180, 460);
+
+      // Chão metálico com rebites
+      staticBg.fillStyle(0x23272d, 1);
+      staticBg.fillRect(0, GROUND_Y, GAME_WIDTH, groundHeight);
       
-      const windows = [];
-      const cols = Math.floor(w / 18) - 1;
-      const rows = Math.floor(h / 24) - 2;
-      for (let c = 0; c < cols; c++) {
-        for (let r = 0; r < rows; r++) {
-          windows.push({
-            x: 10 + c * 18,
-            y: h - (32 + r * 24),
-            lit: Math.random() > 0.65,
-            timer: Math.random() * 4
-          });
+      staticBg.fillStyle(0x191c20, 1);
+      for (let x = 0; x < GAME_WIDTH; x += 160) {
+        staticBg.fillRect(x, GROUND_Y, 4, groundHeight);
+        for (let ry = GROUND_Y + 10; ry < GAME_HEIGHT; ry += 15) {
+          staticBg.fillCircle(x + 12, ry, 2);
+          staticBg.fillCircle(x - 8, ry, 2);
         }
       }
-      this.buildings.push({ x: bx, width: w, height: h, color, windows });
-      bx += w - 15;
+      staticBg.fillRect(0, GROUND_Y + 30, GAME_WIDTH, 3);
+
+      // Inicializa chuva
+      for (let i = 0; i < 90; i++) {
+        this.rainDrops.push({
+          x: Math.random() * GAME_WIDTH,
+          y: Math.random() * GAME_HEIGHT,
+          length: Math.random() * 25 + 15,
+          speedY: 700 + Math.random() * 300,
+          speedX: -80 - Math.random() * 40
+        });
+      }
+
+      // Inicializa nuvens
+      for (let i = 0; i < 6; i++) {
+        this.clouds.push({
+          x: Math.random() * GAME_WIDTH,
+          y: 30 + Math.random() * 120,
+          w: 120 + Math.random() * 100,
+          h: 30 + Math.random() * 20,
+          speed: 8 + Math.random() * 12
+        });
+      }
+
+    } else if (this.stageId === 'forestDojo') {
+      // Céu do pôr-do-sol de violeta a laranja
+      for (let y = 0; y < GROUND_Y; y += 4) {
+        const ratio = y / GROUND_Y;
+        const r = Math.floor(45 + ratio * 160);
+        const g = Math.floor(15 + ratio * 65);
+        const b = Math.floor(55 - ratio * 15);
+        const color = (r << 16) | (g << 8) | b;
+        staticBg.fillStyle(color, 1);
+        staticBg.fillRect(0, y, GAME_WIDTH, 4);
+      }
+
+      // Sol poente vermelho
+      staticBg.fillStyle(0xcc3300, 0.85);
+      staticBg.fillCircle(380, GROUND_Y - 90, 110);
+      staticBg.fillStyle(0xffaa00, 0.25);
+      staticBg.fillCircle(380, GROUND_Y - 90, 135);
+
+      // Montanhas distantes silhueta
+      staticBg.fillStyle(0x2d1729, 1);
+      staticBg.beginPath();
+      staticBg.moveTo(-50, GROUND_Y);
+      staticBg.lineTo(150, GROUND_Y - 140);
+      staticBg.lineTo(380, GROUND_Y - 90);
+      staticBg.lineTo(650, GROUND_Y - 180);
+      staticBg.lineTo(900, GROUND_Y - 120);
+      staticBg.lineTo(GAME_WIDTH + 50, GROUND_Y);
+      staticBg.closePath();
+      staticBg.fillPath();
+
+      // Cerca de bambu
+      staticBg.fillStyle(0x190c17, 1);
+      for (let x = 30; x < GAME_WIDTH; x += 110) {
+        staticBg.fillRect(x, GROUND_Y - 80, 8, 80);
+        staticBg.fillRect(x - 20, GROUND_Y - 60, 50, 4);
+        staticBg.fillRect(x - 20, GROUND_Y - 30, 50, 4);
+      }
+
+      // Árvores silhueta
+      staticBg.fillStyle(0x150913, 1);
+      staticBg.beginPath();
+      staticBg.moveTo(-30, GROUND_Y);
+      staticBg.lineTo(40, GROUND_Y - 260);
+      staticBg.lineTo(110, GROUND_Y);
+      staticBg.closePath();
+      staticBg.fillPath();
+
+      staticBg.beginPath();
+      staticBg.moveTo(50, GROUND_Y);
+      staticBg.lineTo(120, GROUND_Y - 200);
+      staticBg.lineTo(210, GROUND_Y);
+      staticBg.closePath();
+      staticBg.fillPath();
+
+      staticBg.beginPath();
+      staticBg.moveTo(GAME_WIDTH - 180, GROUND_Y);
+      staticBg.lineTo(GAME_WIDTH - 90, GROUND_Y - 240);
+      staticBg.lineTo(GAME_WIDTH + 20, GROUND_Y);
+      staticBg.closePath();
+      staticBg.fillPath();
+
+      // Chão de tablado de madeira
+      staticBg.fillStyle(0x352125, 1);
+      staticBg.fillRect(0, GROUND_Y, GAME_WIDTH, groundHeight);
+      
+      staticBg.fillStyle(0x28191c, 1);
+      for (let y = GROUND_Y; y < GAME_HEIGHT; y += 12) {
+        staticBg.fillRect(0, y, GAME_WIDTH, 2);
+      }
+
+      // Inicializa pétalas de sakura
+      for (let i = 0; i < 30; i++) {
+        this.sakuraPetals.push({
+          x: Math.random() * GAME_WIDTH,
+          y: Math.random() * GROUND_Y,
+          sizeW: Math.random() * 5 + 4,
+          sizeH: Math.random() * 3 + 2,
+          speedY: 45 + Math.random() * 35,
+          speedX: -25 - Math.random() * 25,
+          angle: Math.random() * Math.PI,
+          angleSpeed: Math.random() * 1.5 + 0.5,
+          phase: Math.random() * Math.PI * 2
+        });
+      }
     }
 
-    // Letreiro Neon
-    this.neonSign = this.add.text(GAME_WIDTH / 2, 120, 'NEON DOJO', {
-      font: '900 48px Impact, Arial Black, sans-serif',
-      color: '#ff0077',
-      align: 'center',
-      stroke: '#ff0077',
-      strokeThickness: 3
-    }).setOrigin(0.5, 0.5);
-    this.neonSign.setShadow(0, 0, '#ff0077', 20, true, true);
-
-    // Inicializa Plateia Silhueta
+    // Inicializa Plateia
     this.crowd = [];
     for (let x = 20; x < GAME_WIDTH; x += 36) {
       this.crowd.push({
@@ -287,31 +557,6 @@ export class FightScene extends Phaser.Scene {
       });
     }
     this.crowdExcitement = 0;
-
-    // Solo do ringue (estático)
-    const groundHeight = GAME_HEIGHT - GROUND_Y;
-    staticBg.fillStyle(0x131924, 1);
-    staticBg.fillRect(0, GROUND_Y, GAME_WIDTH, groundHeight);
-
-    // Placa do solo com padrão de tablado
-    staticBg.fillStyle(0x1a2333, 1);
-    for (let x = 0; x < GAME_WIDTH; x += 80) {
-      staticBg.fillRect(x, GROUND_Y, 2, groundHeight);
-    }
-
-    // Refletores de arena nas laterais (estáticos)
-    staticBg.fillStyle(0x232d3d, 1);
-    staticBg.fillRect(60, GROUND_Y - 260, 12, 260);
-    staticBg.fillRect(GAME_WIDTH - 72, GROUND_Y - 260, 12, 260);
-
-    // Holofotes de luz brilhante
-    staticBg.fillStyle(0xffd700, 0.12);
-    staticBg.fillTriangle(66, GROUND_Y - 250, 0, GROUND_Y, 200, GROUND_Y);
-    staticBg.fillTriangle(GAME_WIDTH - 66, GROUND_Y - 250, GAME_WIDTH - 200, GROUND_Y, GAME_WIDTH, GROUND_Y);
-
-    // Bordas neon amarela/ciano do ringue tatami
-    staticBg.fillStyle(0x00ffff, 0.8);
-    staticBg.fillRect(0, GROUND_Y - 2, GAME_WIDTH, 4);
 
     this.cameras.main.setBounds(0, 0, GAME_WIDTH, GAME_HEIGHT);
   }
@@ -370,83 +615,113 @@ export class FightScene extends Phaser.Scene {
   }
 
   private createHUD(): void {
-    // 1. Cronômetro digital com fundo preto semitransparente
-    const timerBg = this.add.rectangle(GAME_WIDTH / 2, 44, 90, 56, 0x000000, 0.65);
-    timerBg.setStrokeStyle(2, 0xffcc00);
+    // 1. Cronômetro digital com fundo preto semitransparente e moldura dourada
+    const timerBg = this.add.rectangle(GAME_WIDTH / 2, 44, 90, 56, 0x0b111e, 0.85);
+    timerBg.setStrokeStyle(3, 0xd9b64a);
 
     this.timerText = this.add.text(
       GAME_WIDTH / 2,
       44,
       `${Math.ceil(this.roundManager.timer)}`,
-      { font: 'bold 36px Courier, monospace', color: '#ffcc00', align: 'center' }
+      { font: 'bold 38px Courier New, monospace', color: '#ffd700', align: 'center' }
     ).setOrigin(0.5, 0.5);
 
-    // 2. Nomes dos Jogadores
-    const p1Label = this.add.text(50, 10, 'PLAYER 1', { font: '900 15px Arial', color: '#ffffff' });
+    // 2. Nomes dos Jogadores com efeitos de sombra e fonte arcade
+    const p1Label = this.add.text(50, 4, 'PLAYER 1', {
+      font: '900 18px Impact, Arial Black, sans-serif',
+      color: '#ff3333',
+      stroke: '#000000',
+      strokeThickness: 3
+    });
+    p1Label.setShadow(0, 0, '#ff3333', 10, true, true);
+
     const p2LabelText = this.isVsBot ? 'BOT' : (this.isOnline ? 'OPPONENT' : 'PLAYER 2');
-    const p2Label = this.add.text(GAME_WIDTH - 50, 10, p2LabelText, { font: '900 15px Arial', color: '#ffffff' }).setOrigin(1, 0);
+    const p2Label = this.add.text(GAME_WIDTH - 50, 4, p2LabelText, {
+      font: '900 18px Impact, Arial Black, sans-serif',
+      color: '#3388ff',
+      stroke: '#000000',
+      strokeThickness: 3
+    }).setOrigin(1, 0);
+    p2Label.setShadow(0, 0, '#3388ff', 10, true, true);
 
     // 3. Barra de Vida Player 1 (Esquerda para Direita)
     const barWidth = 470;
     const barHeight = 24;
-    const p1BarBg = this.add.rectangle(50, 30, barWidth, barHeight, 0x222222).setOrigin(0, 0);
-    p1BarBg.setStrokeStyle(2, 0xffffff, 0.5);
 
+    // Moldura metálica P1 HP
+    const p1HealthBorder = this.add.graphics();
+    p1HealthBorder.lineStyle(3, 0xd9b64a, 0.85);
+    p1HealthBorder.fillStyle(0x0e1118, 1);
+    p1HealthBorder.fillRoundedRect(46, 26, barWidth + 8, barHeight + 8, 4);
+    p1HealthBorder.strokeRoundedRect(46, 26, barWidth + 8, barHeight + 8, 4);
+
+    const p1BarBg = this.add.rectangle(50, 30, barWidth, barHeight, 0x222222).setOrigin(0, 0);
     this.p1CatchupBar = this.add.rectangle(50, 30, barWidth, barHeight, 0xcc2222).setOrigin(0, 0);
     this.p1HealthBar = this.add.rectangle(50, 30, barWidth, barHeight, 0x00ff66).setOrigin(0, 0);
 
     // 4. Barra de Vida Player 2 (Direita para Esquerda)
-    const p2BarBg = this.add.rectangle(GAME_WIDTH - 50, 30, barWidth, barHeight, 0x222222).setOrigin(1, 0);
-    p2BarBg.setStrokeStyle(2, 0xffffff, 0.5);
+    // Moldura metálica P2 HP
+    const p2HealthBorder = this.add.graphics();
+    p2HealthBorder.lineStyle(3, 0xd9b64a, 0.85);
+    p2HealthBorder.fillStyle(0x0e1118, 1);
+    p2HealthBorder.fillRoundedRect(GAME_WIDTH - 50 - barWidth - 4, 26, barWidth + 8, barHeight + 8, 4);
+    p2HealthBorder.strokeRoundedRect(GAME_WIDTH - 50 - barWidth - 4, 26, barWidth + 8, barHeight + 8, 4);
 
+    const p2BarBg = this.add.rectangle(GAME_WIDTH - 50, 30, barWidth, barHeight, 0x222222).setOrigin(1, 0);
     this.p2CatchupBar = this.add.rectangle(GAME_WIDTH - 50, 30, barWidth, barHeight, 0xcc2222).setOrigin(1, 0);
     this.p2HealthBar = this.add.rectangle(GAME_WIDTH - 50, 30, barWidth, barHeight, 0x00ff66).setOrigin(1, 0);
 
-    // 4b. Barras de Postura (abaixo da vida) - desgasta ao bloquear, recupera devagar
+    // 4b. Sub-molduras para Postura e Super
     const postWidth = 470;
     const postHeight = 8;
-    const p1PostBg = this.add.rectangle(50, 62, postWidth, postHeight, 0x222222).setOrigin(0, 0);
-    p1PostBg.setStrokeStyle(1, 0xffffff, 0.4);
-    const p2PostBg = this.add.rectangle(GAME_WIDTH - 50, 62, postWidth, postHeight, 0x222222).setOrigin(1, 0);
-    p2PostBg.setStrokeStyle(1, 0xffffff, 0.4);
+
+    const p1SubBorder = this.add.graphics();
+    p1SubBorder.lineStyle(1.5, 0x4c515d, 0.6);
+    p1SubBorder.fillStyle(0x0e1118, 0.95);
+    p1SubBorder.fillRoundedRect(47, 59, postWidth + 6, 23, 2);
+    p1SubBorder.strokeRoundedRect(47, 59, postWidth + 6, 23, 2);
+
+    const p2SubBorder = this.add.graphics();
+    p2SubBorder.lineStyle(1.5, 0x4c515d, 0.6);
+    p2SubBorder.fillStyle(0x0e1118, 0.95);
+    p2SubBorder.fillRoundedRect(GAME_WIDTH - 50 - postWidth - 3, 59, postWidth + 6, 23, 2);
+    p2SubBorder.strokeRoundedRect(GAME_WIDTH - 50 - postWidth - 3, 59, postWidth + 6, 23, 2);
+
+    // Barras de Postura
     this.p1PostureBar = this.add.rectangle(50, 62, postWidth, postHeight, 0xffcc00).setOrigin(0, 0);
     this.p2PostureBar = this.add.rectangle(GAME_WIDTH - 50, 62, postWidth, postHeight, 0xffcc00).setOrigin(1, 0);
 
-    // 4c. Barras de Super (EX/Reversal custam 25; MORTAL é o display abaixo)
-    const meterBg = this.add.rectangle(50, 73, postWidth, 6, 0x10131c).setOrigin(0, 0);
-    meterBg.setStrokeStyle(1, 0x00ffff, 0.25);
-    const p2MeterBg = this.add.rectangle(GAME_WIDTH - 50, 73, postWidth, 6, 0x10131c).setOrigin(1, 0);
-    p2MeterBg.setStrokeStyle(1, 0x00ffff, 0.25);
+    // Barras de Super
     this.p1MeterBar = this.add.rectangle(50, 73, postWidth, 6, 0x00bbff).setOrigin(0, 0);
     this.p2MeterBar = this.add.rectangle(GAME_WIDTH - 50, 73, postWidth, 6, 0x00bbff).setOrigin(1, 0);
 
-    // 5. Estrelas de Vitória (Wins) - 3 rounds para vencer (abaixo da barra de super)
+    // 5. Estrelas de Vitória
     this.p1ScoreStars = [];
     for (let i = 0; i < 3; i++) {
-      const star = this.add.star(60 + i * 24, 88, 5, 6, 11, 0x333333);
+      const star = this.add.star(60 + i * 24, 94, 5, 6, 11, 0x333333);
       this.p1ScoreStars.push(star);
     }
 
     this.p2ScoreStars = [];
     for (let i = 0; i < 3; i++) {
-      const star = this.add.star(GAME_WIDTH - 60 - i * 24, 88, 5, 6, 11, 0x333333);
+      const star = this.add.star(GAME_WIDTH - 60 - i * 24, 94, 5, 6, 11, 0x333333);
       this.p2ScoreStars.push(star);
     }
 
-    // 5b. Indicador do especial (MORTAL - pulo + chute+soco+chute, cooldown 10s)
-    this.p1SpecialText = this.add.text(50, 104, '', { font: '900 13px Arial', color: '#ffcc00' });
-    this.p2SpecialText = this.add.text(GAME_WIDTH - 50, 104, '', { font: '900 13px Arial', color: '#ffcc00' }).setOrigin(1, 0);
+    // 5b. Indicador do especial (MORTAL)
+    this.p1SpecialText = this.add.text(50, 108, '', { font: '900 13px Arial', color: '#ffcc00' });
+    this.p2SpecialText = this.add.text(GAME_WIDTH - 50, 108, '', { font: '900 13px Arial', color: '#ffcc00' }).setOrigin(1, 0);
 
     // 6. Contador de Combos
-    this.p1ComboText = this.add.text(120, 110, '', {
-      font: 'italic 900 42px Impact, Arial Black',
+    this.p1ComboText = this.add.text(120, 125, '', {
+      font: 'italic 900 44px Impact, Arial Black',
       color: '#ffcc00',
       stroke: '#000000',
       strokeThickness: 6
     }).setOrigin(0.5, 0.5).setVisible(false);
 
-    this.p2ComboText = this.add.text(GAME_WIDTH - 120, 110, '', {
-      font: 'italic 900 42px Impact, Arial Black',
+    this.p2ComboText = this.add.text(GAME_WIDTH - 120, 125, '', {
+      font: 'italic 900 44px Impact, Arial Black',
       color: '#ffcc00',
       stroke: '#000000',
       strokeThickness: 6
@@ -485,68 +760,203 @@ export class FightScene extends Phaser.Scene {
     if (!g) return;
     g.clear();
 
-    // 1. Estrelas piscando
-    for (const star of this.stars) {
-      const alpha = 0.4 + Math.sin(time * 0.002 * star.speed + star.phase) * 0.4;
-      g.fillStyle(0xffffff, alpha);
-      g.fillRect(star.x, star.y, star.size, star.size);
-    }
-
-    // 2. Nuvens flutuando com velocidade horizontal
-    g.fillStyle(0xffffff, 0.06);
-    for (const cloud of this.clouds) {
-      cloud.x += cloud.speed * dt;
-      if (cloud.x > GAME_WIDTH + cloud.w) {
-        cloud.x = -cloud.w;
+    if (this.stageId === 'neonDojo') {
+      // 1. Estrelas piscando
+      for (const star of this.stars) {
+        const alpha = 0.4 + Math.sin(time * 0.002 * star.speed + star.phase) * 0.4;
+        g.fillStyle(0xffffff, alpha);
+        g.fillRect(star.x, star.y, star.size, star.size);
       }
-      g.fillRoundedRect(cloud.x, cloud.y, cloud.w, cloud.h, cloud.h / 2);
-    }
 
-    // 3. Silhuetas urbanas (skyline) e janelas piscando
-    for (const b of this.buildings) {
-      g.fillStyle(b.color, 1);
-      g.fillRect(b.x, GROUND_Y - b.height, b.width, b.height);
-
-      // Renderiza as janelas do predio
-      for (const w of b.windows) {
-        w.timer -= dt;
-        if (w.timer <= 0) {
-          w.lit = Math.random() > 0.7;
-          w.timer = 1 + Math.random() * 5;
+      // 2. Nuvens flutuando com velocidade horizontal
+      g.fillStyle(0xffffff, 0.06);
+      for (const cloud of this.clouds) {
+        cloud.x += cloud.speed * dt;
+        if (cloud.x > GAME_WIDTH + cloud.w) {
+          cloud.x = -cloud.w;
         }
-        if (w.lit) {
-          g.fillStyle(0xffd700, 0.7); // Janela amarela acesa
-          g.fillRect(b.x + w.x, GROUND_Y - b.height + w.y, 4, 6);
+        g.fillRoundedRect(cloud.x, cloud.y, cloud.w, cloud.h, cloud.h / 2);
+      }
+
+      // 3. Silhuetas urbanas (skyline) e janelas piscando
+      for (const b of this.buildings) {
+        g.fillStyle(b.color, 1);
+        g.fillRect(b.x, GROUND_Y - b.height, b.width, b.height);
+
+        // Renderiza as janelas do predio
+        for (const w of b.windows) {
+          w.timer -= dt;
+          if (w.timer <= 0) {
+            w.lit = Math.random() > 0.7;
+            w.timer = 1 + Math.random() * 5;
+          }
+          if (w.lit) {
+            g.fillStyle(0xffd700, 0.7); // Janela amarela acesa
+            g.fillRect(b.x + w.x, GROUND_Y - b.height + w.y, 4, 6);
+          }
         }
       }
-    }
 
-    // 4. Oscilação / Flicker do Letreiro Neon
-    if (this.neonSign) {
-      const r = Math.random();
-      if (r < 0.04) {
-        this.neonSign.setAlpha(0.15);
-      } else if (r < 0.12) {
-        this.neonSign.setAlpha(0.65);
-      } else {
-        this.neonSign.setAlpha(0.95 + Math.sin(time * 0.04) * 0.05);
+      // 4. Letreiro Neon Flicker
+      if (this.neonSign) {
+        const r = Math.random();
+        if (r < 0.04) {
+          this.neonSign.setAlpha(0.15);
+        } else if (r < 0.12) {
+          this.neonSign.setAlpha(0.65);
+        } else {
+          this.neonSign.setAlpha(0.95 + Math.sin(time * 0.04) * 0.05);
+        }
+      }
+
+    } else if (this.stageId === 'volcanicTemple') {
+      // 1. Cinzas flutuando para cima
+      for (const cinder of this.stars) {
+        cinder.y -= cinder.speed * dt;
+        cinder.x += Math.sin(time * 0.003 + cinder.phase) * 1.5;
+
+        if (cinder.y < -10) {
+          cinder.y = GROUND_Y;
+          cinder.x = Math.random() * GAME_WIDTH;
+        }
+        
+        const alpha = 0.5 + Math.sin(time * 0.005 + cinder.phase) * 0.35;
+        g.fillStyle(0xff5500, alpha);
+        g.fillRect(cinder.x, cinder.y, cinder.size, cinder.size);
+      }
+
+      // 2. Bolhas de lava borbulhando
+      for (const bubble of this.lavaBubbles) {
+        bubble.y -= bubble.speed * dt;
+        if (bubble.y <= bubble.maxH) {
+          g.fillStyle(0xffaa00, 0.85);
+          g.fillCircle(bubble.x, bubble.y, bubble.r * 1.7);
+          
+          bubble.x = 100 + Math.random() * (GAME_WIDTH - 200);
+          bubble.y = GROUND_Y + 15;
+          bubble.r = Math.random() * 3 + 2;
+          bubble.speed = Math.random() * 12 + 6;
+          bubble.maxH = GROUND_Y + 5 - Math.random() * 12;
+        } else {
+          g.fillStyle(0xff2200, 0.9);
+          g.fillCircle(bubble.x, bubble.y, bubble.r);
+          g.fillStyle(0xffd700, 0.95);
+          g.fillCircle(bubble.x, bubble.y, bubble.r * 0.45);
+        }
+      }
+
+    } else if (this.stageId === 'cyberpunkCity') {
+      // 1. Nuvens sob tempestade
+      g.fillStyle(0xffffff, 0.03);
+      for (const cloud of this.clouds) {
+        cloud.x += cloud.speed * dt;
+        if (cloud.x > GAME_WIDTH + cloud.w) {
+          cloud.x = -cloud.w;
+        }
+        g.fillRoundedRect(cloud.x, cloud.y, cloud.w, cloud.h, cloud.h / 2);
+      }
+
+      // 2. Outdoors piscando
+      const p1Color = (Math.random() > 0.05) ? 0xff0055 : 0x330011;
+      const p2Color = (Math.random() > 0.08) ? 0x00ffff : 0x003333;
+      g.fillStyle(p1Color, 0.4);
+      g.fillRect(100, GROUND_Y - 380, 140, 80);
+      g.fillStyle(p2Color, 0.4);
+      g.fillRect(860, GROUND_Y - 340, 140, 160);
+
+      // 3. Pingos de chuva caindo rápidos e inclinados
+      g.lineStyle(1.5, 0x88aaff, 0.4);
+      for (const drop of this.rainDrops) {
+        drop.x += drop.speedX * dt;
+        drop.y += drop.speedY * dt;
+
+        if (drop.y > GROUND_Y) {
+          this.rainSplashes.push({
+            x: drop.x,
+            y: GROUND_Y + Math.random() * (GAME_HEIGHT - GROUND_Y),
+            r: 2,
+            maxR: Math.random() * 6 + 4,
+            alpha: 0.65
+          });
+          drop.x = Math.random() * GAME_WIDTH;
+          drop.y = -20;
+        } else {
+          g.beginPath();
+          g.moveTo(drop.x, drop.y);
+          g.lineTo(drop.x + drop.speedX * 0.015, drop.y + drop.speedY * 0.015);
+          g.strokePath();
+        }
+      }
+
+      // 4. Respingos no chão metálico
+      for (let i = this.rainSplashes.length - 1; i >= 0; i--) {
+        const splash = this.rainSplashes[i];
+        splash.r += dt * 32;
+        splash.alpha -= dt * 3.8;
+        if (splash.alpha <= 0) {
+          this.rainSplashes.splice(i, 1);
+        } else {
+          g.lineStyle(1.0, 0xaaccff, splash.alpha);
+          g.strokeEllipse(splash.x, splash.y, splash.r, splash.r * 0.3);
+        }
+      }
+
+    } else if (this.stageId === 'forestDojo') {
+      // Pétalas de Sakura flutuando e oscilando
+      for (const petal of this.sakuraPetals) {
+        petal.y += petal.speedY * dt;
+        petal.x += (petal.speedX + Math.sin(time * 0.0025 + petal.phase) * 16) * dt;
+        petal.angle += petal.angleSpeed * dt;
+
+        if (petal.y > GROUND_Y + 40 || petal.x < -10) {
+          petal.y = -10;
+          petal.x = Math.random() * (GAME_WIDTH + 80);
+          petal.angle = Math.random() * Math.PI;
+        }
+
+        g.fillStyle(0xffb7c5, 0.8);
+        g.beginPath();
+        const cx = petal.x;
+        const cy = petal.y;
+        const w = petal.sizeW;
+        const h = petal.sizeH;
+        const cos = Math.cos(petal.angle);
+        const sin = Math.sin(petal.angle);
+
+        const x1 = cx - w/2 * cos - h/2 * sin;
+        const y1 = cy - w/2 * sin + h/2 * cos;
+        const x2 = cx + w/2 * cos - h/2 * sin;
+        const y2 = cy + w/2 * sin + h/2 * cos;
+        const x3 = cx + w/2 * cos + h/2 * sin;
+        const y3 = cy + w/2 * sin - h/2 * cos;
+        const x4 = cx - w/2 * cos + h/2 * sin;
+        const y4 = cy - w/2 * sin - h/2 * cos;
+
+        g.moveTo(x1, y1);
+        g.lineTo(x2, y2);
+        g.lineTo(x3, y3);
+        g.lineTo(x4, y4);
+        g.closePath();
+        g.fillPath();
       }
     }
 
     // 5. Plateia silhueta pulando
-    // Reduz excitamento gradualmente
     this.crowdExcitement = Math.max(0, this.crowdExcitement - dt * 2.2);
 
-    g.fillStyle(0x0a0f1d, 1);
+    let crowdColor = 0x0a0f1d;
+    if (this.stageId === 'volcanicTemple') crowdColor = 0x120a08;
+    else if (this.stageId === 'cyberpunkCity') crowdColor = 0x090c12;
+    else if (this.stageId === 'forestDojo') crowdColor = 0x180d15;
+
+    g.fillStyle(crowdColor, 1);
     for (const person of this.crowd) {
-      // Movimento ritmico normal + pulo excitado
       const normalHop = Math.max(0, Math.sin(time * 0.008 + person.phase) * 6);
       const excitedHop = this.crowdExcitement * (22 + Math.sin(time * 0.02 + person.phase) * 12);
       const hop = normalHop + excitedHop;
 
       const y = person.baseY - hop;
 
-      // Desenha cabeca e ombros de cada pessoa
       g.fillCircle(person.x, y - 18, 6);
       g.beginPath();
       g.moveTo(person.x - 12, y);
@@ -1069,6 +1479,36 @@ export class FightScene extends Phaser.Scene {
           this.player2.x -= pushForce;
         }
       }
+
+      // Poeira e Aura Visual
+      if (this.vfxManager) {
+        // P1 poeira se estiver andando ou no ar dash
+        const p1Moving = this.player1.state === FighterState.WALKING;
+        const p1Dashing = this.player1.isAirDashing;
+        if ((p1Moving && Math.random() < 0.12) || p1Dashing) {
+          this.vfxManager.createDustTrail(this.player1.x, this.player1.y);
+        }
+
+        // P2 poeira
+        const p2Moving = this.player2.state === FighterState.WALKING;
+        const p2Dashing = this.player2.isAirDashing;
+        if ((p2Moving && Math.random() < 0.12) || p2Dashing) {
+          this.vfxManager.createDustTrail(this.player2.x, this.player2.y);
+        }
+
+        // Partículas de EX (Ataques EX ativos ou barra 100% cheia)
+        if (this.player1.state === FighterState.ATTACKING && this.player1.attackType?.startsWith('ex')) {
+          this.vfxManager.createEXAura(this.player1.x, this.player1.y, 0xff7700);
+        } else if (this.player1.superMeter >= 100 && Math.random() < 0.18) {
+          this.vfxManager.createEXAura(this.player1.x, this.player1.y, 0xffaa00);
+        }
+
+        if (this.player2.state === FighterState.ATTACKING && this.player2.attackType?.startsWith('ex')) {
+          this.vfxManager.createEXAura(this.player2.x, this.player2.y, 0x00ffff);
+        } else if (this.player2.superMeter >= 100 && Math.random() < 0.18) {
+          this.vfxManager.createEXAura(this.player2.x, this.player2.y, 0x00ffff);
+        }
+      }
     }
 
     if (this.player1Entity) this.player1Entity.update(dt);
@@ -1099,6 +1539,16 @@ export class FightScene extends Phaser.Scene {
         this.crowdExcitement = 1.0;
         this.applyHitFeedback(this.player1, this.player2, this.player2Entity, this.player1Entity, result1);
         this.checkWallBounce(this.player2, result1);
+
+        // Slow motion on KO
+        if (this.player2.ko && this.vfxManager) {
+          this.vfxManager.triggerSlowMoKO();
+        }
+
+        // Trail effect on heavy attacks (P1)
+        if (this.player1.attackType === 'heavyPunch' || this.player1.attackType === 'heavyKick' || this.player1.attackType === 'exHeavyPunch') {
+          if (this.vfxManager) this.vfxManager.createAttackTrail(this.player1.x, this.player1.y, 0xff3300);
+        }
       }
     }
 
@@ -1117,9 +1567,9 @@ export class FightScene extends Phaser.Scene {
           this.vfxManager.triggerSlowMoKO();
         }
 
-        // Trail effect on heavy attacks
-        if (this.player2.attackType === 'heavyPunch' || this.player2.attackType === 'heavyKick') {
-          if (this.vfxManager) this.vfxManager.createAttackTrail(this.player2.x, this.player2.y);
+        // Trail effect on heavy attacks (P2)
+        if (this.player2.attackType === 'heavyPunch' || this.player2.attackType === 'heavyKick' || this.player2.attackType === 'exHeavyPunch') {
+          if (this.vfxManager) this.vfxManager.createAttackTrail(this.player2.x, this.player2.y, 0x00ccff);
         }
       }
     }
@@ -1278,9 +1728,13 @@ export class FightScene extends Phaser.Scene {
     const ratio = Math.max(0, Math.min(1, fighter.superMeter / (fighter.MAX_SUPER_METER ?? 100)));
     bar.setScale(ratio, 1);
     if (ratio >= 1) {
-      const pulse = Math.abs(Math.sin(Date.now() * 0.01));
-      bar.setFillStyle(0x00ffff);
-      bar.setAlpha(0.6 + pulse * 0.4);
+      const pulse = Math.abs(Math.sin(Date.now() * 0.015));
+      // Interpolação manual entre ciano (0, 255, 255) e dourado (255, 215, 0)
+      const r = Math.floor(pulse * 255);
+      const g = Math.floor(255 - pulse * 40);
+      const b = Math.floor(255 - pulse * 255);
+      bar.setFillStyle((r << 16) | (g << 8) | b);
+      bar.setAlpha(0.7 + pulse * 0.3);
     } else if (ratio >= 0.25) {
       bar.setFillStyle(0x00bbff);
       bar.setAlpha(1);

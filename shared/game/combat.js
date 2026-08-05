@@ -6,17 +6,50 @@ export { AttackType };
 export const MoveData = {
   // cooldown (s): trava global após o golpe terminar. Leves são baixos
   // para permitir combos de ligação; pesados são altos para punir whiff.
-  lightPunch: { damage: 5, startup: 3, active: 2, recovery: 6, type: 'high', throw: false, cooldown: 0.1 },
-  heavyPunch: { damage: 12, startup: 8, active: 3, recovery: 14, type: 'high', throw: false, cooldown: 0.28 },
-  lightKick: { damage: 6, startup: 4, active: 3, recovery: 8, type: 'low', throw: false, cooldown: 0.12 },
-  heavyKick: { damage: 15, startup: 10, active: 4, recovery: 18, type: 'low', throw: false, cooldown: 0.32 },
-  throw: { damage: 20, startup: 5, active: 2, recovery: 10, type: 'throw', throw: true, cooldown: 0.4 },
-  exLightPunch: { damage: 10, startup: 4, active: 3, recovery: 8, type: 'high', throw: false, cooldown: 0.16 },
-  exHeavyPunch: { damage: 22, startup: 10, active: 4, recovery: 16, type: 'high', throw: false, cooldown: 0.3 },
-  flyingKick: { damage: 14, startup: 5, active: 9, recovery: 16, type: 'high', throw: false, cooldown: 0.3 },
-  mortal: { damage: 30, startup: 6, active: 14, recovery: 16, type: 'high', throw: false, cooldown: 0.6 },
-  airPunch: { damage: 6, startup: 4, active: 5, recovery: 12, type: 'high', throw: false, cooldown: 0.14 },
-  airHeavyPunch: { damage: 10, startup: 6, active: 6, recovery: 14, type: 'high', throw: false, cooldown: 0.2 },
+  lightPunch: {
+    damage: 5, startup: 3, active: 2, recovery: 6, type: 'high', throw: false, cooldown: 0.1,
+    hitbox: { width: 55, height: 16, offsetX: 10, offsetY: -35 }
+  },
+  heavyPunch: {
+    damage: 12, startup: 8, active: 3, recovery: 14, type: 'high', throw: false, cooldown: 0.28,
+    hitbox: { width: 75, height: 20, offsetX: 12, offsetY: -35 }
+  },
+  lightKick: {
+    damage: 6, startup: 4, active: 3, recovery: 8, type: 'low', throw: false, cooldown: 0.12,
+    hitbox: { width: 60, height: 14, offsetX: 8, offsetY: -12 }
+  },
+  heavyKick: {
+    damage: 15, startup: 10, active: 4, recovery: 18, type: 'low', throw: false, cooldown: 0.32,
+    hitbox: { width: 85, height: 18, offsetX: 10, offsetY: -14 }
+  },
+  throw: {
+    damage: 20, startup: 5, active: 2, recovery: 10, type: 'throw', throw: true, cooldown: 0.4,
+    hitbox: { width: 45, height: 35, offsetX: 5, offsetY: -32 }
+  },
+  exLightPunch: {
+    damage: 10, startup: 4, active: 3, recovery: 8, type: 'high', throw: false, cooldown: 0.16,
+    hitbox: { width: 65, height: 18, offsetX: 10, offsetY: -35 }
+  },
+  exHeavyPunch: {
+    damage: 22, startup: 10, active: 4, recovery: 16, type: 'high', throw: false, cooldown: 0.3,
+    hitbox: { width: 95, height: 24, offsetX: 12, offsetY: -38 }
+  },
+  flyingKick: {
+    damage: 14, startup: 5, active: 9, recovery: 16, type: 'high', throw: false, cooldown: 0.3,
+    hitbox: { width: 75, height: 18, offsetX: 15, offsetY: -28 }
+  },
+  mortal: {
+    damage: 30, startup: 6, active: 14, recovery: 16, type: 'high', throw: false, cooldown: 0.6,
+    hitbox: { width: 100, height: 50, offsetX: 5, offsetY: -38 }
+  },
+  airPunch: {
+    damage: 6, startup: 4, active: 5, recovery: 12, type: 'high', throw: false, cooldown: 0.14,
+    hitbox: { width: 55, height: 16, offsetX: 10, offsetY: -32 }
+  },
+  airHeavyPunch: {
+    damage: 10, startup: 6, active: 6, recovery: 14, type: 'high', throw: false, cooldown: 0.2,
+    hitbox: { width: 70, height: 20, offsetX: 12, offsetY: -32 }
+  },
 };
 
 export const CHIP_DAMAGE_RATIO = 0.15;
@@ -35,17 +68,19 @@ export function createHitbox(fighter) {
   if (fighter.state !== FighterState.ATTACKING) {
     return null;
   }
-  const isThrow = MoveData[fighter.attackType]?.throw;
-  const range = isThrow ? 24 : 45;
-  const width = isThrow ? 30 : 50;
-  // Caixa única ao redor do lutador: cobre tanto a frente quanto atrás dele.
-  const frontReach = range + width;
-  const backReach = isThrow ? 30 : 60;
+  const move = MoveData[fighter.attackType];
+  if (!move || !move.hitbox) {
+    return null;
+  }
+  const hb = move.hitbox;
+  const isFacingRight = (fighter.facing === 'right');
+  const x = isFacingRight ? (fighter.x + hb.offsetX) : (fighter.x - hb.offsetX - hb.width);
+  const y = fighter.y + hb.offsetY;
   return {
-    x: fighter.x - backReach,
-    y: fighter.y - 25,
-    width: frontReach + backReach,
-    height: 35,
+    x,
+    y,
+    width: hb.width,
+    height: hb.height,
   };
 }
 
